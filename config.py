@@ -1,4 +1,4 @@
-BOT_TOKEN = "7739260475:AAEyHo47ABQ9kOAXMs8_zfN30-0k2F6cLbk"
+BOT_TOKEN = "8518536431:AAEsrRt3sO_8-7TVvqvngw2khSN_CVqaTkM"
 REQUEST_TIMEOUT = 800
 
 # Security settings
@@ -18,3 +18,4 @@ API_ENDPOINTS = {
     'cc_generator': "https://drlabapis.onrender.com/api/ccgenerator?bin="
 
 }
+
