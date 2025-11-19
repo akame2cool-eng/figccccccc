@@ -248,24 +248,9 @@ class AuthNetCheckoutAutomation:
             print(f"📄 Final URL: {current_url}")
             print(f"📄 Page title: {page_title}")
             
-            # DEBUG: Stampa parte del testo per vedere cosa c'è realmente
-            print(f"🔍 Sample page text: {page_text[:500]}...")
-            
             # 1. SE SIAMO ANCORA SU /register/ = DECLINED AL 100%
             if 'register' in current_url or 'tempestprotraining.com/register' in current_url:
                 print("❌ DECLINED - Ancora in pagina di registrazione")
-                
-                # Controlla se ci sono messaggi di errore specifici
-                error_indicators = [
-                    'declined', 'error', 'invalid', 'failed', 'try again',
-                    'card was declined', 'payment failed', 'transaction declined'
-                ]
-                
-                for error in error_indicators:
-                    if error in page_text:
-                        print(f"❌ DECLINED - Trovato errore: {error}")
-                        return "DECLINED", f"Payment failed - {error}"
-                
                 return "DECLINED", "Payment failed - Still on registration page"
             
             # 2. CONTROLLA URL DI SUCCESSO REALE
@@ -382,7 +367,7 @@ def process_authnet_payment(card_number, month, year, cvv, headless=True, proxy_
     }
     return processor.process_payment(card_data)
 
-async def au_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def authnet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check card with AuthNet"""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
@@ -466,5 +451,5 @@ Tier: {bin_data.get('tier', 'N/A')}"""
         await wait_message.edit_text(response)
         
     except Exception as e:
-        logger.error(f"❌ Error in au_command: {e}")
+        logger.error(f"❌ Error in authnet_command: {e}")
         await wait_message.edit_text(f"❌ Error: {str(e)}")
