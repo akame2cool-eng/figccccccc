@@ -5,7 +5,7 @@ from config import BOT_TOKEN
 from bot_handlers import (
     start_command, cmds_command, cmd_command, id_command, allow_command, 
     disallow_command, list_allowed_command, check_card_command, stripe5_command, 
-    stripe9_command, shopify_command, crunchyroll_command, bin_command, gen_command,  # ADDED stripe9_command
+    stripe9_command, s1_command, crunchyroll_command, bin_command, gen_command,  # CAMBIATO sh A s1
     gates_command, utility_command, button_handler, handle_messages, error_handler,
     caliper_command, authnet_command_wrapper
 )
@@ -33,8 +33,8 @@ def main():
     application.add_handler(CommandHandler("utility", utility_command))
     application.add_handler(CommandHandler("chk", check_card_command))
     application.add_handler(CommandHandler("st5", stripe5_command))
-    application.add_handler(CommandHandler("st9", stripe9_command))  # NEW COMMAND
-    application.add_handler(CommandHandler("sh", shopify_command))
+    application.add_handler(CommandHandler("st9", stripe9_command))
+    application.add_handler(CommandHandler("s1", s1_command))  # CAMBIATO sh A s1
     application.add_handler(CommandHandler("au", authnet_command_wrapper))
     application.add_handler(CommandHandler("paypal", paypal_command))
     application.add_handler(CommandHandler("crunchy", crunchyroll_command))
@@ -50,7 +50,7 @@ def main():
     
     application.add_error_handler(error_handler)
     
-    print("🤖 Bot started with Stripe $9 Gateway...")
+    print("🤖 Bot started with Shopify $1 Gateway (s1 command)...")
     application.run_polling()
 
 if __name__ == '__main__':
